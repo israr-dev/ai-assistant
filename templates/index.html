@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Versatile AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background */
+        }
+        .chat-container {
+            max-height: 70vh; /* Limit chat history height */
+            overflow-y: auto; /* Enable scrolling for chat history */
+            scroll-behavior: smooth; /* Smooth scrolling for new messages */
+        }
+        .user-message {
+            background-color: #e0e7ff; /* Light blue for user messages */
+            border-bottom-left-radius: 0.75rem; /* rounded-xl */
+            border-bottom-right-radius: 0.75rem; /* rounded-xl */
+            border-top-left-radius: 0.75rem; /* rounded-xl */
+            border-top-right-radius: 0.25rem; /* rounded-r-md */
+        }
+        .ai-message {
+            background-color: #d1fae5; /* Light green for AI messages */
+            border-bottom-left-radius: 0.75rem; /* rounded-xl */
+            border-bottom-right-radius: 0.75rem; /* rounded-xl */
+            border-top-right-radius: 0.75rem; /* rounded-xl */
+            border-top-left-radius: 0.25rem; /* rounded-l-md */
+        }
+        .loading-dots span {
+            animation: blink 1s infinite;
+        }
+        .loading-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .loading-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-2xl">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Versatile AI Assistant</h1>
+
+        <!-- PDF Upload Section -->
+        <div class="mb-6 border p-4 rounded-lg bg-blue-50 border-blue-200">
+            <h2 class="text-xl font-semibold text-blue-800 mb-3">Upload Knowledge Base (PDF)</h2>
+            <div class="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3">
+                <input type="file" id="pdfFileInput" accept=".pdf" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                <button id="uploadPdfButton" class="w-full sm:w-auto px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105">
+                    Upload & Process
+                </button>
+            </div>
+            <div id="pdfUploadMessage" class="mt-3 text-sm text-center text-gray-600"></div>
+            <div id="pdfProcessingSpinner" class="hidden text-center mt-3">
+                <div class="inline-block h-6 w-6 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
+                <span class="ml-2 text-gray-600">Processing PDF... This may take a while.</span>
+            </div>
+        </div>
+
+        <!-- Chat Interface -->
+        <div class="chat-container bg-gray-100 p-4 rounded-lg shadow-inner mb-6">
+            <div id="chatHistory" class="flex flex-col space-y-4">
+                <!-- Chat messages will be appended here -->
+                <div class="flex justify-start">
+                    <div class="ai-message max-w-[80%] p-3 shadow-md">
+                        Hi there! How can I help you today? You can upload a PDF to ask questions about it, or just ask me anything!
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input Section -->
+        <div class="flex items-center space-x-3">
+            <input type="text" id="questionInput" placeholder="Ask a question..." class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 shadow-sm transition duration-150 ease-in-out">
+            <button id="sendButton" class="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 transition duration-300 ease-in-out transform hover:scale-105">
+                Send
+            </button>
+        </div>
+        <div id="loadingSpinner" class="hidden text-center mt-3">
+            <div class="inline-block h-6 w-6 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
+            <span class="ml-2 text-gray-600">Thinking<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span></span>
+        </div>
+        <div id="errorBox" class="hidden mt-3 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg" role="alert">
+            <p id="errorMessage"></p>
+        </div>
+    </div>
+
+    <script>
+        const pdfFileInput = document.getElementById('pdfFileInput');
+        const uploadPdfButton = document.getElementById('uploadPdfButton');
+        const pdfUploadMessage = document.getElementById('pdfUploadMessage');
+        const pdfProcessingSpinner = document.getElementById('pdfProcessingSpinner');
+        const questionInput = document.getElementById('questionInput');
+        const sendButton = document.getElementById('sendButton');
+        const chatHistory = document.getElementById('chatHistory');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const errorBox = document.getElementById('errorBox');
+        const errorMessage = document.getElementById('errorMessage');
+
+        // Function to display messages in the chat
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('flex', 'mb-2');
+            if (sender === 'user') {
+                messageDiv.classList.add('justify-end');
+                messageDiv.innerHTML = `
+                    <div class="user-message max-w-[80%] p-3 shadow-md">
+                        ${text}
+                    </div>
+                `;
+            } else {
+                messageDiv.classList.add('justify-start');
+                messageDiv.innerHTML = `
+                    <div class="ai-message max-w-[80%] p-3 shadow-md">
+                        ${text}
+                    </div>
+                `;
+            }
+            chatHistory.appendChild(messageDiv);
+            chatHistory.scrollTop = chatHistory.scrollHeight; // Scroll to bottom
+        }
+
+        // Function to show/hide loading spinner
+        function showLoadingSpinner(show) {
+            loadingSpinner.classList.toggle('hidden', !show);
+            sendButton.disabled = show;
+            questionInput.disabled = show;
+        }
+
+        // Function to show error message
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorBox.classList.remove('hidden');
+        }
+
+        // Function to clear error message
+        function clearError() {
+            errorBox.classList.add('hidden');
+            errorMessage.textContent = '';
+        }
+
+        // Handle PDF upload
+        uploadPdfButton.addEventListener('click', async () => {
+            clearError();
+            const file = pdfFileInput.files[0];
+            if (!file) {
+                showError('Please select a PDF file to upload.');
+                return;
+            }
+
+            pdfUploadMessage.textContent = ''; // Clear previous messages
+            pdfProcessingSpinner.classList.remove('hidden'); // Show spinner
+
+            const formData = new FormData();
+            formData.append('pdf_file', file);
+
+            try {
+                const response = await fetch('/upload_pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    pdfUploadMessage.textContent = data.message;
+                    pdfUploadMessage.classList.remove('text-red-700');
+                    pdfUploadMessage.classList.add('text-green-700');
+                } else {
+                    showError(data.error || 'An error occurred during PDF upload.');
+                    pdfUploadMessage.classList.remove('text-green-700');
+                    pdfUploadMessage.classList.add('text-red-700');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Network error or server unreachable during PDF upload.');
+                pdfUploadMessage.classList.remove('text-green-700');
+                pdfUploadMessage.classList.add('text-red-700');
+            } finally {
+                pdfProcessingSpinner.classList.add('hidden'); // Hide spinner
+            }
+        });
+
+        // Handle sending questions
+        sendButton.addEventListener('click', async () => {
+            clearError();
+            const question = questionInput.value.trim();
+            if (question === '') {
+                showError('Please enter a question.');
+                return;
+            }
+
+            addMessage(question, 'user');
+            questionInput.value = '';
+            showLoadingSpinner(true);
+
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    addMessage(data.answer, 'ai');
+                } else {
+                    showError(data.error || 'An error occurred while getting the AI response.');
+                    addMessage("Sorry, I couldn't get a response. Please try again.", 'ai');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Network error or server unreachable during AI query.');
+                addMessage("Sorry, I couldn't connect to the AI. Please check your Ollama setup.", 'ai');
+            } finally {
+                showLoadingSpinner(false);
+            }
+        });
+
+        // Allow sending message with Enter key
+        questionInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendButton.click();
+            }
+        });
+    </script>
+</body>
+</html>
